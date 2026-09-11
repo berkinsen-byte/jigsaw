@@ -151,12 +151,30 @@
     max-width:400px;background:none;border:0;box-shadow:none;padding:0;gap:0;
   }
 
-  #wtitle{width:100%;max-width:392px;margin:0 0 -6px;display:block}
-  #wtitle{overflow:visible}
-  #wtitle text{
-    font-family:var(--f);font-weight:700;font-size:52px;
-    fill:#FFF6E2;stroke:#3F8F22;stroke-width:10;stroke-linejoin:round;
-    paint-order:stroke fill;
+  /* Arched with one rotated span per letter. The previous version arched the
+     word along an SVG textPath and relied on textLength to keep it inside the
+     viewBox - WebKit ignores textLength on a textPath, so on iOS the word ran
+     off the edge and the L was cut off. Ordinary inline text cannot do that,
+     and clamp() keeps it inside even the narrowest phone. */
+  #wtitle{
+    position:relative;z-index:3;
+    display:flex;justify-content:center;align-items:flex-end;
+    font-family:var(--f);font-weight:700;
+    font-size:clamp(22px, 7.2vw, 37px);
+    line-height:1;white-space:nowrap;max-width:100%;
+    /* the outer letters are pushed down by the arc, and a transform does not
+       grow the box, so the dip has to be paid for in padding or the word ends
+       up sitting on top of the frame */
+    margin:0 0 6px;padding:14px 0 16px;
+  }
+  #wtitle .ch{
+    position:relative;display:inline-block;color:#FFF6E2;
+    transform-origin:50% 100%;
+    text-shadow:0 3px 0 rgba(0,0,0,.28);
+  }
+  #wtitle .ch::before{               /* the green outline, drawn behind the fill */
+    content:attr(data-t);position:absolute;left:0;top:0;z-index:-1;
+    -webkit-text-stroke:.23em #3F8F22;color:#3F8F22;text-shadow:none;
   }
 
   /* hammered gold: layered metal stops, a bevel top and bottom, dark inner ring */
@@ -362,12 +380,7 @@
 </div></div>
 
 <div class="over" id="oWin"><div class="card">
-  <svg id="wtitle" viewBox="0 0 400 104" aria-label="Level Complete">
-    <defs><path id="warc" d="M18,86 Q200,4 382,86"></path></defs>
-    <!-- textLength pins the word to the arc so it can never run off the edge -->
-    <text text-anchor="middle" dy="2"><textPath href="#warc" startOffset="50%"
-      textLength="330" lengthAdjust="spacingAndGlyphs">Level Complete!</textPath></text>
-  </svg>
+  <div id="wtitle">Level Complete!</div>
   <div class="goldframe"><img id="wimg" alt=""></div>
   <div id="wcap"></div>
   <div id="wbtns">
@@ -1341,6 +1354,22 @@ window.addEventListener('resize', ()=>{
   for (const p of M.pieces){ const c=cellOrigin(p.cell); p.px=c.x; p.py=c.y; }
   draw();
 });
+
+// Bend the title into an arc, one letter at a time. Letters near the ends tilt
+// outwards and drop, which reads as a curve without any SVG involved.
+(function archTitle(){
+  const host = el('wtitle'), chars = [...host.textContent.trim()];
+  host.textContent = '';
+  chars.forEach((ch, i) => {
+    const span = document.createElement('span');
+    span.className = 'ch';
+    span.textContent = ch === ' ' ? '\u00A0' : ch;
+    span.dataset.t = span.textContent;
+    const t = chars.length < 2 ? 0 : (i / (chars.length - 1)) * 2 - 1;   // -1 .. 1
+    span.style.transform = `rotate(${(t * 11).toFixed(2)}deg) translateY(${(t * t * 12).toFixed(2)}px)`;
+    host.appendChild(span);
+  });
+})();
 
 /* ---------------- test hooks ---------------- */
 M.testMove = (cell, dr, dc) => { const ok = moveGroup(M.gid[cell], dr, dc); if (ok) resolve(); return ok; };
